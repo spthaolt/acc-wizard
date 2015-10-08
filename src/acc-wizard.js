@@ -1,4 +1,3 @@
-
 /*!
  * jQuery plug-in to implement an accordion wizard based on bootstrap
  * Original author: @stephen_thomas
@@ -20,7 +19,7 @@
     // being passed in so we can ensure that its value is
     // truly undefined. In ES5, undefined can no longer be
     // modified.
-	
+
     // window and document are passed through as local
     // variables rather than as globals, because this (slightly)
     // quickens the resolution process and can be more
@@ -72,7 +71,7 @@
                 $(options.sidebar,$el).children("li")
                     .children("a[href='" + hash + "']")
                     .parent("li").addClass(options.activeClass);
-    
+
                 // Remove class from other tasks
                 $(options.sidebar,$el).children("li")
                     .children("a[href!='" + hash + "']")
@@ -134,17 +133,27 @@
                                     "type":  options.nextType,
                                     "text":  options.nextText
                                 }));
+                var backOnly = $( "<div/>", {
+                                    "class": options.stepClass
+                                })
+                                .append($("<button/>", {
+                                    "class": options.backClasses,
+                                    "type":  options.backType,
+                                    "text":  options.backText
+                                }));
 
                 // Grab all the <form> elements in the accordion stack
                 // and count them.
-                var forms = $(".accordion-body .accordion-inner form", $el);
-                var last = forms.length-1;
-            
+                var forms = $(".panel-collapse .panel-body form", $el);
+                var last = forms.length;
+
                 // We deliberately skip the last form element because
                 // that should be the confirm button for the whole page
                 for (var ix=0; ix<last; ix++) {
                     if (ix === 0) {
                         $(forms[0]).append(nextOnly);
+                    } else if (ix === (last - 1)) {
+                        $(forms[last - 1]).append(backOnly);
                     } else {
                         $(forms[ix]).append($(nextBack).clone());
                     }
@@ -166,7 +175,10 @@
             // the first panel that isn't complete is the active panel. If none
             // of the steps are marked as complete, then use the first step.
 
-            currentHash = window.location.hash ||
+            if (options.autoScrolling) {
+                currentHash = window.location.hash;
+            }
+            currentHash = currentHash ||
                           $(options.sidebar,$el)
                               .children("li."+options.todoClass+":first")
                               .children("a").attr("href") ||
@@ -175,11 +187,13 @@
                               .children("a").attr("href");
 
             // Sync up the window hash with our calculated value
-            window.location.hash = currentHash;
+            if (options.autoScrolling) {
+                window.location.hash = currentHash;
+            }
 
             // We also need to know the overall parent for the panels
-            var parent = "#" + $(".accordion",$el)[0].id;
-            
+            var parent = "#" + $(".panel-group",$el)[0].id;
+
             // Scan through all the .collapse elements, calling collapse()
             // on them to prime the bootstrap data. We show the current
             // hash and hide the others, doing so via the toggle option.
@@ -206,22 +220,35 @@
             // Next up are the events we need to hook. To continue
             // with the hash theme, here's our hook for hash
             // changes.
-            $(window).bind('hashchange', function() {
-                if (currentHash !== window.location.hash) {
-                    currentHash = window.location.hash;
-                    $(".accordion-body" + currentHash,$el).collapse("show");
-                    makeTaskActive(currentHash);
-                }
-            });
+            if (options.autoScrolling) {
+                $(window).bind('hashchange', function() {
+                    if (currentHash !== window.location.hash) {
+                        currentHash = window.location.hash;
+                        $(".panel-collapse" + currentHash,$el).collapse("show");
+                        makeTaskActive(currentHash);
+                    }
+                });
+            }
 
             // Whenever a new accordion panel is shown, update
             // the vertical navigation task list to make
             // the current panel the active task.
-            
-            $(".accordion-body",$el).on("shown", function () {
-                currentHash = "#" + this.id;
+//            $(".panel-collapse",$el).on("shown", function () {
+//                console.log('show');
+//                currentHash = "#" + this.id;
+//                makeTaskActive(currentHash);
+//                window.location.hash = currentHash;
+//            });
+
+            // Whenever a panel title is clicked, update
+            // the vertical navigation task list to make
+            // the current panel the active task.
+            $(".panel-title a").on("click", function () {
+                currentHash = $(this).attr("href");
                 makeTaskActive(currentHash);
-                window.location.hash = currentHash;
+                if (options.autoScrolling) {
+                    window.location.hash = currentHash;
+                }
             });
 
             if (options.addButtons) {
@@ -231,27 +258,34 @@
                     .children("button[type='"+options.nextType+"']")
                     .click(function(ev) {
                         ev.preventDefault();
-                        var panel = $(this).parents(".accordion-body")[0];
-                        var next = "#" + $(".accordion-body",
-                               $(panel).parents(".accordion-group")
-                               .next(".accordion-group")[0])[0].id;
+                        var panel = $(this).parents(".panel-collapse")[0];
+                        if(hook('beforeNext', panel)===false) return false;
+                        var next = "#" + $(".panel-collapse",
+                            $(panel).parents(".panel")
+                                .next(".panel")[0])[0].id;
                         $(next).collapse("show");
                         hook('onNext', panel);
+                        currentHash = next;
+                        makeTaskActive(currentHash);
+                        window.location.hash = currentHash;
                     });
-            
+
                 // When the user clicks the "Back" button in
-                // any panel, retrurn to the previous panel.
-            
+                // any panel, return to the previous panel.
                 $("."+options.stepClass,$el)
                     .children("button[type='"+options.backType+"']")
                     .click(function(ev) {
                         ev.preventDefault();
-                        var panel = $(this).parents(".accordion-body")[0];
-                        var prev = "#" + $(".accordion-body",
-                                       $(panel).parents(".accordion-group")
-                                       .prev(".accordion-group")[0])[0].id;
+                        var panel = $(this).parents(".panel-collapse")[0];
+                        if(hook('beforeBack', panel)===false) return false;
+                        var prev = "#" + $(".panel-collapse",
+                            $(panel).parents(".panel")
+                                .prev(".panel")[0])[0].id;
                         $(prev).collapse("show");
-                        hook('onPrev', panel);
+                        hook('onBack', panel);
+                        currentHash = prev;
+                        makeTaskActive(currentHash);
+                        window.location.hash = currentHash;
                     });
             }
 
@@ -282,14 +316,14 @@
         // hookName: function() {}
         // Then somewhere in the plugin trigger the callback:
         // hook('hookName');
-				
+
         function hook(hookName) {
             if (options[hookName] !== undefined) {
                 // Call the user defined function.
                 // Scope is set to the jQuery element we are operating on.
                 var fn = options[hookName];
                 arguments[0] = el;
-                fn.apply(this, arguments);
+                return fn.apply(this, arguments);
             }
         }
 
@@ -366,10 +400,11 @@
         backType:       "reset",                // HTML input type for back button
         nextClasses:    "btn btn-primary",      // class(es) for next button
         backClasses:    "btn",                  // class(es) for back button
+        autoScrolling:  true,
         onNext:         function() {},          // function to call on next step
         onBack:         function() {},          // function to call on back up
         onInit:         function() {},          // a chance to hook initialization
         onDestroy:      function() {}           // a chance to hook destruction
     };
-		
+
 })( jQuery, window, document );
